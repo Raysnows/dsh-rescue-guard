@@ -27,6 +27,7 @@ import { applyIfArmed, arm, confirmHealthyBoot, disarm, status } from '../lib/sa
 import { readBoot } from '../lib/paths.js'
 import { chromiumTimeToIso, inspectCookies, newestCookieBackup, pruneAuthCookies, MAX_HEADER_BYTES } from '../lib/cookies.js'
 import { readConfig, writeConfig, configPath } from '../lib/config.js'
+import { resolveHostModules } from '../lib/bundles.js'
 
 const C = {
   reset: '\u001b[0m', bold: '\u001b[1m', dim: '\u001b[2m',
@@ -748,7 +749,10 @@ async function main() {
         return 1
       }
       const running = flags.running === true ? true : isDshRunning()
-      const plan = await repair.planRepairs({ profileDir: profile, home, running })
+      /* hostModules: the CLI has no process.resourcesPath, so this is where the recorded
+       * .rescue/host.json (and the env fallbacks) let it resolve official bundles the same way the
+       * Host does instead of calling them missing. */
+      const plan = await repair.planRepairs({ profileDir: profile, home, running, hostModules: resolveHostModules() })
       if (flags.json && !flags.apply) { console.log(JSON.stringify(plan, null, 2)); return plan.steps.length > 0 ? 1 : 0 }
       head('修复方案')
       if (plan.steps.length === 0) ok('没有可自动修复的问题')
@@ -771,7 +775,7 @@ async function main() {
         return 2
       }
       const result = await repair.applyRepairs({
-        profileDir: profile, home, running,
+        profileDir: profile, home, running, hostModules: resolveHostModules(),
         steps: flags.to ? String(flags.to).split(',') : null,
       })
       if (flags.json) { console.log(JSON.stringify(result, null, 2)); return result.ok ? 0 : 1 }
