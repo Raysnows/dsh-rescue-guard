@@ -1,6 +1,6 @@
 {
   "name": "dsh-rescue-guard",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "DSH 启动救援与自我修复：启动前静态预检命令名冲突与缺失文件，保留配置快照，DSH 起不来时用独立 CLI（dsh-rescue）禁用可疑 bundle 并回滚清单。",
   "type": "module",
   "license": "MIT",
@@ -34,6 +34,7 @@
     "client.js",
     "lib",
     "bin",
+    "assets",
     "locale",
     "test",
     "icon.svg",
@@ -76,10 +77,12 @@
     "desktop-shortcut": "node bin/install-desktop.mjs"
   },
   "main": "./index.js",
+  "icon": "./icon.svg",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
     "./package.json": "./package.json",
-    "./locale/*.json": "./locale/*.json"
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
   }
 }
