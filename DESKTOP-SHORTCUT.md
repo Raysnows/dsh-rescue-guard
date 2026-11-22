@@ -9,6 +9,22 @@ node bin/install-desktop.mjs
 
 成功会在桌面生成 `DSH 救援台.cmd`，双击即开。
 
+## 方式 A2：带图标的快捷方式
+
+```
+cd <本插件目录>
+node bin/install-desktop.mjs --shortcut
+```
+
+会在桌面生成 `DSH救援台.lnk`：**看起来就是插件的图标**（红橙脉搏），双击同样是救援台。
+
+为什么必须用 .lnk：Windows 的批处理（`.cmd`）**没有可设置的图标位置**，资源管理器永远画
+cmd.exe 那个黑窗口图标。只有快捷方式有 `IconLocation`。所以这里用 PowerShell 的
+`WScript.Shell` 建链接，图标取 `assets/dsh-rescue.ico`（16/24/32/48/64/128/256 七档），
+目标指向纯 ASCII 的 `bin/rescue-console.cmd`（它自己找 Node、双击结束时会 pause）。
+
+两种方式都在桌面留**一个**入口；`node bin/install-desktop.mjs --remove` 会把 `.cmd` 与 `.lnk` 都清掉。
+
 ## 方式 B：手动建快捷方式
 
 1. 右键桌面 → 新建 → 快捷方式
