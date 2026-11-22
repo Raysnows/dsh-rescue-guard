@@ -1157,7 +1157,7 @@ console.log('\n[20] 路由鉴权 / 握手 nonce / preset 契约 / cookie 只写�
 
   check('注册 12 条路由并在 100ms 内返回（启动路径不得阻塞 >100ms）', () => {
     assert(registerMs < 100, 'registerRoutes 耗时 ' + registerMs + 'ms')
-    eq(routes.size, 14, '路由数（含 /repair.json 与 /report.json）')
+    eq(routes.size, 15, '路由数（含 /repair.json、/report.json 与 /bundles.json）')
   })
 
   const handshake = await callRoute('/handshake.json')
@@ -2075,6 +2075,113 @@ console.log('\n[25] 修复事务：方案 / 备份 / 自动回滚 / 手动回滚
     eq(failed.ok, false, '应失败')
     eq(failed.rolledBack, true, '应自动回滚')
     eq(readFileSync(path.join(profile, 'cordis.patch.yml'), 'utf8'), before, '回滚后 patch 应等于修复前')
+  })
+
+  rmSync(root, { recursive: true, force: true })
+}
+
+/* ------------------------------------------------------------------ 2026-11-22 回归 */
+
+/*
+ * 误判：五条官方 bundle 被报成"解析不到"，修复方案要移除它们。
+ *
+ * 成因有两层，缺一层就复现不出来：
+ *   1. 判定只看 <profile>/node_modules，而官方 bundle 全部随宿主安装；
+ *   2. 宿主装在一个 .asar 归档里 —— Electron 进程里它表现为目录，普通 Node 里它是文件，
+ *      所以独立 CLI（DSH 起不来时唯一能用的东西）连"安装目录在哪"都看不到。
+ *
+ * 这三条测试把两层都钉住：asar 里能解析、没有锚点时官方包判 unknown 而不是 missing、
+ * 官方包永远进不了可移除集合。
+ */
+console.log('\n[26] bundle 解析：宿主两跳锚点 + asar 归档（2026-11-22 官方包误判）')
+{
+  /* 造一个最小 asar：16 字节前缀 + JSON 索引。布局与 Chromium 的 asarPack 一致。 */
+  function writeAsar(file, tree) {
+    const header = { files: tree }
+    const json = Buffer.from(JSON.stringify(header), 'utf8')
+    const prefix = Buffer.alloc(16)
+    const headerSize = json.length + 8
+    prefix.writeUInt32LE(4, 0)
+    prefix.writeUInt32LE(headerSize, 4)
+    prefix.writeUInt32LE(headerSize - 4, 8)
+    prefix.writeUInt32LE(json.length, 12)
+    writeFileSync(file, Buffer.concat([prefix, json]))
+  }
+
+  /** A directory node in the asar index. */
+  const dir = (children) => ({ files: children })
+  /** A file node; only existence matters to the resolver, so the body is empty. */
+  const fileNode = { size: 0, offset: '0' }
+
+  const root = path.join(os.tmpdir(), 'rescue-asar-' + Date.now())
+  const resources = path.join(root, 'resources')
+  mkdirSync(resources, { recursive: true })
+  const asarFile = path.join(resources, 'app.asar')
+  writeAsar(asarFile, {
+    dsh: dir({
+      'package.json': fileNode,
+      node_modules: dir({
+        '@deepseek-ai': dir({
+          'dsh-base': dir({ 'package.json': fileNode }),
+          'dsh-web-app': dir({ 'package.json': fileNode })
+        })
+      })
+    })
+  })
+
+  const profileRoot = path.join(root, 'profiles', 'desktop')
+  mkdirSync(path.join(profileRoot, '.rescue'), { recursive: true })
+  writeFileSync(
+    path.join(profileRoot, 'package.json'),
+    JSON.stringify({
+      dsh: {
+        profile: {
+          bundles: [
+            '@deepseek-ai/dsh-base',
+            '@deepseek-ai/dsh-web-app',
+            'ghost-plugin'
+          ]
+        }
+      },
+      dependencies: { 'ghost-plugin': '1.0.0' }
+    }, null, 2)
+  )
+
+  const bundles = await import('../lib/bundles.js')
+  const repair = await import('../lib/repair.js')
+
+  check('asar 归档里的官方 bundle 能被解析（顶层目录形式）', () => {
+    const idx = bundles.readAsarIndex(asarFile)
+    assert(idx !== null, 'asarl 索引读不出来')
+    const hit = bundles.resolveBundle(profileRoot, '@deepseek-ai/dsh-base', { resourcesPath: resources })
+    eq(hit.source, 'host', 'source')
+    assert(hit.dir !== null && hit.dir.includes('app.asar'), 'dir 应指向归档内的虚拟路径：' + hit.dir)
+  })
+
+  check('没有安装锚点时，官方包判 unknown，绝不判 missing', () => {
+    const state = bundles.inspectBundles(profileRoot, { resourcesPath: null, env: {} })
+    eq(state.provable, false, 'provable')
+    eq(state.officialMissing.length, 0, '官方包不能被判成缺失')
+    eq(state.unknown.includes('@deepseek-ai/dsh-base'), true, 'unknown 里应有官方包')
+  })
+
+  check('第三方包的缺失不需要宿主锚点也能证明（profile 是它唯一的家）', () => {
+    const state = bundles.inspectBundles(profileRoot, { resourcesPath: null, env: {} })
+    eq(state.removable.includes('ghost-plugin'), true, '缺 ghost-plugin')
+  })
+
+  check('官方包永远不进可移除集合，即使锚点可用且它真的不在归档里', () => {
+    const state = bundles.inspectBundles(profileRoot, { resourcesPath: resources })
+    eq(state.officialMissing.includes('@deepseek-ai/dsh-base'), false, 'dsh-base 在归档里，不该缺失')
+    eq(state.removable.some((n) => n.startsWith('@deepseek-ai/')), false, '可移除集合里不能有官方包')
+  })
+
+  const plan = await repair.planRepairs({ profileDir: profileRoot, home: path.join(root, '.dsh'), running: false })
+  check('修复方案只针对第三方 ghost-plugin，不碰官方包', () => {
+    const step = plan.steps.find((item) => item.id === 'missing-bundle')
+    assert(step, '缺 missing-bundle 步骤')
+    assert(step.detail.includes('ghost-plugin'), 'detail 应包含 ghost-plugin：' + step.detail)
+    eq(step.detail.includes('@deepseek-ai/'), false, 'detail 里不能出现官方包：' + step.detail)
   })
 
   rmSync(root, { recursive: true, force: true })
