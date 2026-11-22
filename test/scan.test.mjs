@@ -257,10 +257,24 @@ test('HEURISTIC_NOTE is exported for callers to repeat', () => {
 const REAL_PROFILE = 'C:\\Users\\HP\\.dsh\\profiles\\desktop'
 const REAL_HOME = 'C:\\Users\\HP\\.dsh'
 const HAVE_REAL_PROFILE = existsSync(join(REAL_PROFILE, 'package.json'))
+/* The `rules` clash is between two plugins, so the case only means something while both are
+ * installed. dsh-permission-rules was removed from this profile on 2026-11-22; without this
+ * guard the suite reports a regression that is actually an environment change (verified: the
+ * previously released scan.js reports the same empty result on the same profile). */
+const HAVE_RULES_CLASH = [
+  join(REAL_PROFILE, 'node_modules', 'dsh-permission-rules', 'package.json'),
+  join(REAL_PROFILE, 'node_modules', 'dsh-purge', 'package.json')
+].every((file) => existsSync(file))
 
 test(
   'real profile: dsh-permission-rules vs dsh-purge `/rules` collision is reproduced',
-  { skip: HAVE_REAL_PROFILE ? false : 'real desktop profile is not present' },
+  {
+    skip: !HAVE_REAL_PROFILE
+      ? 'real desktop profile is not present'
+      : HAVE_RULES_CLASH
+        ? false
+        : 'dsh-permission-rules / dsh-purge are no longer both installed in the real profile'
+  },
   () => {
     const result = scanProfile({ profileDir: REAL_PROFILE, homeDir: REAL_HOME })
     const rules = result.collisions.find((c) => c.name === 'rules')
