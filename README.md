@@ -351,10 +351,13 @@ DSH 拒绝启动的那一刻，图形界面正是坏掉的东西——这时候�
 **在桌面上双击一个东西**。所以本插件自带一个菜单式救援台：
 
 ```bash
-dsh-rescue-desktop          # 或 node bin/install-desktop.mjs
+dsh-rescue-desktop                    # 纯 .cmd 入口
+node bin/install-desktop.mjs --shortcut   # 带插件图标的 .lnk 入口（推荐）
 ```
 
-会在桌面创建 `DSH 救援台.cmd`（Windows；macOS/Linux 为 `.sh`），双击后是编号菜单：
+会在桌面创建一个入口（Windows；macOS/Linux 为 `.sh`）——默认是 `DSH救援台.cmd`，
+加 `--shortcut` 则生成带图标的 `DSH救援台.lnk`（图标取自 `assets/dsh-rescue.ico`，
+批处理文件放不了自定义图标）。双击后是编号菜单：
 
 ```
   [1] 一键诊断        崩溃原因 + 预检 + 该做什么（推荐先点这个）
