@@ -5,6 +5,21 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.0] - 2026-11-22
+
+### 新增
+
+- **桌面快捷方式图标**（`assets/dsh-rescue.ico`，16/24/32/48/64/128/256 七档）与
+  `node bin/install-desktop.mjs --shortcut`：在桌面生成 `DSH救援台.lnk`，显示插件自己的图标。
+  .cmd 没有可设置的图标位置（资源管理器永远画 cmd.exe 的黑窗口），只有快捷方式有 `IconLocation`。
+  默认行为不变，仍是纯 ASCII 的 `.cmd` 入口；`--remove` 两种一起清掉。
+
+### 变更
+
+- **插件图标重绘**：`icon.svg` 从 24×24 改为 36×36（与其他插件同一套砖形/圆角/描边规范），
+  去掉 16px 下糊成一团的小扳手，改成加粗的脉搏折线，桌面 32/16px 与插件列表 24px 都能认出来。
+- `package.json` 补 `icon` 字段、`./icon` 导出与 `assets` 打包项——缺前者时插件列表取不到图标。
+
 ## [0.8.1] - 2026-11-21
 
 ### 变更
