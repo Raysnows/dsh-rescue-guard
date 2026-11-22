@@ -99,7 +99,8 @@ Failed plugins (27): …
 ## 无第三方素材
 
 - 无第三方依赖（`dependencies` 与 `peerDependencies` 均为空，只用 Node 内置模块）
-- `icon.svg` 为原创图形
+- `icon.svg` 为原创图形；`assets/dsh-rescue.ico` 是同一张图形用浏览器光栅化出的
+  16/24/32/48/64/128/256 七档 Windows 图标，无第三方素材、无嵌入元数据
 - 不含从 DSH 应用安装目录（`app.asar`）提取的任何资源
 
 ## 代码引用
