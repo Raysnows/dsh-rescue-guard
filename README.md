@@ -202,6 +202,20 @@ dsh-rescue repair --undo <id>     # 手动回滚到某次修复之前
 
 当前能自动修的（都是这台机器上真实发生过的故障）：
 
+> **bundle "解析不到"的判定规则（0.9.1 起）**
+>
+> 宿主 `@deepseek-ai/dsh-app-boot` 是按**两跳**解析 bundle 的：先安装锚点
+> （`<resources>/app.asar/dsh/package.json`），再 profile。官方 `@deepseek-ai/*` bundle 全部随
+> 安装携带，**不会**出现在 profile 的 `node_modules` 里——所以"profile 里没有"根本不等于"缺失"。
+>
+> 更棘手的是 `app.asar` 是**归档**：在 Electron 宿主里它表现为目录，在普通 Node（也就是
+> `dsh-rescue` CLI 运行的地方）里它是一个文件，`existsSync` 一律返回 `false`。0.9.0 只查
+> profile、且完全看不见归档，于是在一个完全健康的安装上报出五条"无法解析"，并建议移除它们
+> （含 `dsh-base`、`dsh-web-app` 这两个界面骨架）。
+>
+> 0.9.1 起：自己读 asar 头部索引做解析；宿主会记录锚点到 `.rescue/host.json` 供 CLI 复用；
+> 官方包**永不**进入可移除集合；证据不足时判 `unknown`（只提示）而不是 `missing`（动手）。
+
 | 步骤 | 修什么 | 需要退出 DSH |
 |---|---|---|
 | `preset-pointer` | 悬空的 `default`/`selectedDefault` 指针 | 否（下次启动生效） |
@@ -210,7 +224,7 @@ dsh-rescue repair --undo <id>     # 手动回滚到某次修复之前
 | `cookies-prune` | 超过 16 KiB 的 `dsh-auth` Cookie（431/"认证失败"） | **是** |
 | `command-clash` | 禁用命令名冲突里的第三方一方 | 否 |
 | `missing-file` | 禁用构造期读取缺失文件的插件 | 否 |
-| `missing-bundle` | 移出 bundles 里指向不存在包的项 | 否 |
+| `missing-bundle` | 移出 bundles 里指向不存在包的**第三方**项（官方 `@deepseek-ai/*` 永不拆除） | 否 |
 
 安全措施（不是口头承诺，全部有测试）：
 
@@ -556,7 +570,7 @@ node bin/install-desktop.mjs
 代价很高——它给你的建议是要照做的。无任何依赖，跑一条命令即可：
 
 ```bash
-node test/regression.mjs     # 期望：全部通过（44 项）
+node test/regression.mjs     # 期望：全部通过（176 项）
 ```
 
 覆盖的是**真实事故反推**的行为，不是构造的用例，例如：
