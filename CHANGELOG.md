@@ -5,6 +5,51 @@
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循[语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.9.1] - 2026-11-22
+
+### 修复
+
+- **严重：把五条健康的官方 bundle 报成"解析不到"，并建议把它们从启动清单里移除。**
+  在真实安装上复现为：`dsh-rescue repair` 给出「移出无法解析的 bundle」，清单里是
+  `@deepseek-ai/dsh-base`、`dsh-web-app` 和三个 `dsh-experimental-*`。照做会删掉界面骨架。
+  成因有两层，缺一层都复现不出来：
+
+  1. **判定只查了一个锚点。** 宿主的 `@deepseek-ai/dsh-app-boot` 是按「安装锚点 →
+     profile」两跳解析的，官方 bundle 全部随安装携带，从来不在 profile 的 `node_modules` 里。
+     只查 profile，就把它们全判成缺失。
+  2. **`app.asar` 是归档，不是目录。** 宿主跑在 Electron 里，它的 `fs` 会虚拟化归档，
+     所以 `existsSync('<resources>/app.asar/dsh/package.json')` 在宿主里是 `true`；
+     独立 CLI 是普通 Node 程序，同一个路径是 200 MB 的文件。也就是说，
+     **修好第 1 层仍然会在最需要它的场景（DSH 起不来、只能用 CLI）继续误报。**
+
+  现在的做法：新增 `lib/bundles.js`，完整实现宿主的两跳解析（`createRequire(anchor).resolve.paths`
+  探 `package.json`，跟随符号链接），并**自己读 asar 头部索引**（`uint32` 前缀 + JSON index，
+  `asarPack` 布局），所以在没有 Electron 的普通 Node 里也能看见归档内的包。宿主侧会把安装
+  锚点写进 `.rescue/host.json`，CLI 据此解析；锚点失效（升级换目录）时逐项校验后自动丢弃。
+
+### 新增
+
+- **移除前的三道闸**，任何一道都能单独挡住这次的误伤：
+  - 官方 `@deepseek-ai/*` **永远进不了可移除集合**，即使它真的不在归档里；`runMissingBundle`
+    拒绝执行并报错，不写 `package.json`；
+  - 没有可读的安装锚点时，官方包判 `unknown`（"证明不了"）而不是 `missing`（"确实没有"），
+    只提示、不动手；
+  - 第三方包不受此限：DSH 不随包发第三方插件，profile 是它唯一的家，所以缺了就是缺了——
+    这让修复在找不到安装目录的机器上仍然有用。
+- **新路由 `/bundles.json`**（只读，免 token）：面板可以直接展示每个 bundle 由哪个锚点解析到，
+  而不是只给一句"解析不到"。
+- **19 条回归**：`test/regression.mjs` 新增第 26 组，用真实 asar 布局（16 字节前缀 + JSON 索引）
+  造归档，钉住「归档内可解析」「无锚点时官方包判 unknown」「第三方缺失可直接证明」
+  「官方包永不进可移除集合」「修复方案只针对第三方」。
+- 预检（升级前检查）同样改用两跳判定，并把"官方包缺失""无法证明"分成两种不同级别的提示。
+
+### 变更
+
+- `unresolvableBundles()` 语义收窄为「已证明缺失、且允许自动移除的第三方包」，并标记为
+  过渡导出；请改用 `inspectBundles()`，它能区分 `missing` / `unknown` / `officialMissing`。
+- `scanProfile()` 现在会把宿主解析到的官方 bundle 也纳入扫描，`bundles[]` 多一个
+  `resolvedFrom` 字段（`host` / `profile` / `missing`）。
+
 ## [0.9.0] - 2026-11-22
 
 ### 新增
