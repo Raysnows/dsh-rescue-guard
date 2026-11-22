@@ -21,6 +21,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { recordHostAnchor, resolveHostModules } from './lib/bundles.js'
 import { registerRoutes } from './lib/routes.js'
 import { beginBoot, confirmBoot, readBoot, rescueDir, resolvePaths } from './lib/paths.js'
 import { arm, confirmHealthyBoot, disarm, status } from './lib/safemode.js'
@@ -83,24 +84,6 @@ function cliCommand() {
   return 'dsh-rescue diagnose（见插件 README）'
 }
 
-/**
- * The Host install's `node_modules`, or null.
- *
- * Only the Desktop shell knows where it lives (`process.resourcesPath`), and only when running
- * inside the app. Returning null is correct for a plain `dsh web`: first-party bundles then
- * report `source: 'host'` with a null version instead of a fabricated one.
- */
-function resolveHostModules() {
-  try {
-    const resources = process.resourcesPath
-    if (typeof resources !== 'string' || !resources) return null
-    const candidate = path.join(resources, 'app.asar', 'dsh', 'node_modules')
-    return existsSync(candidate) ? candidate : null
-  } catch {
-    return null
-  }
-}
-
 export function apply(ctx) {
   const paths = resolvePaths()
 
@@ -123,6 +106,10 @@ export function apply(ctx) {
   // The Host's own node_modules, so first-party bundles resolve instead of reporting "missing".
   // `process.resourcesPath` is set by the Desktop shell; a plain `dsh web` has no such tree.
   const hostModules = resolveHostModules()
+  /* Remember where this installation lives: the standalone CLI has no process.resourcesPath, and
+   * without this record it would have to guess - which is how five healthy official bundles were
+   * once reported as unresolvable (2026-11-22). Best effort, never a reason to fail a boot. */
+  recordHostAnchor(paths.profileDir, { resourcesPath: process.resourcesPath ?? null, hostModules })
 
   let fingerprint = null
   try {
